@@ -1,5 +1,8 @@
 package com.accountservice.entity;
 
-public class TransactionType {
+public enum TransactionType {
+
+    CREDIT,
+    DEBIT
 
 }
