@@ -5,7 +5,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
 import com.gatewayservice.config.FeignConfig;
-import com.gatewayservice.dto.EventRequest;
+import com.gatewayservice.dto.TransactionRequest;
 
 @FeignClient(
         name = "account-service",
@@ -14,7 +14,7 @@ import com.gatewayservice.dto.EventRequest;
 )
 public interface AccountServiceClient {
 
-    @PostMapping("/accounts/transactions")
-    Object processTransaction(@RequestBody EventRequest request);
+	  @PostMapping("/accounts/transactions")
+	   void processTransaction(@RequestBody TransactionRequest request);
 
 }

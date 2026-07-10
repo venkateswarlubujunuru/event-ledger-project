@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.gatewayservice.client.AccountServiceClient;
 import com.gatewayservice.dto.EventRequest;
 import com.gatewayservice.dto.EventResponse;
+import com.gatewayservice.dto.TransactionRequest;
 import com.gatewayservice.entity.Event;
 import com.gatewayservice.entity.EventStatus;
 import com.gatewayservice.exception.DuplicateEventException;
@@ -24,66 +25,60 @@ import lombok.RequiredArgsConstructor;
 @Transactional
 public class EventService {
 
-    private final EventRepository eventRepository;
-    private final EventMapper eventMapper;
-    private final AccountServiceClient accountServiceClient;
+	private final EventRepository eventRepository;
+	private final EventMapper eventMapper;
+	private final AccountServiceClient accountServiceClient;
 
-    @CircuitBreaker(name = "accountService", fallbackMethod = "processFallback")
-    @Retry(name = "accountService")
-    public EventResponse createEvent(EventRequest request) {
+	@CircuitBreaker(name = "accountService", fallbackMethod = "processFallback")
+	@Retry(name = "accountService")
+	public EventResponse createEvent(EventRequest request) {
 
-        if (eventRepository.existsByEventId(request.getEventId())) {
-            throw new DuplicateEventException(
-                    "Duplicate Event : " + request.getEventId());
-        }
+		if (eventRepository.existsByEventId(request.getEventId())) {
+			throw new DuplicateEventException("Duplicate Event : " + request.getEventId());
+		}
 
-        Event event = eventMapper.toEntity(request);
+		Event event = eventMapper.toEntity(request);
 
-        event.setStatus(EventStatus.RECEIVED);
+		event.setStatus(EventStatus.RECEIVED);
 
-        event = eventRepository.save(event);
+		event = eventRepository.save(event);
 
-        accountServiceClient.processTransaction(request);
+		TransactionRequest transactionRequest = TransactionRequest.builder().eventId(request.getEventId())
+				.accountId(request.getAccountId()).transactionType(request.getType()).amount(request.getAmount())
+				.eventTimestamp(request.getEventTimestamp()).build();
 
-        event.setStatus(EventStatus.PROCESSED);
+		accountServiceClient.processTransaction(transactionRequest);
 
-        eventRepository.save(event);
+		event.setStatus(EventStatus.PROCESSED);
 
-        return eventMapper.toResponse(event);
-    }
+		eventRepository.save(event);
 
-    public EventResponse processFallback(
-            EventRequest request,
-            Exception ex) {
+		return eventMapper.toResponse(event);
+	}
 
-        Event event = eventRepository.findById(request.getEventId())
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Event not found"));
+	public EventResponse processFallback(EventRequest request, Throwable ex) {
 
-        event.setStatus(EventStatus.FAILED);
+		Event event = eventRepository.findById(request.getEventId())
+				.orElseThrow(() -> new ResourceNotFoundException("Event not found : " + request.getEventId()));
 
-        eventRepository.save(event);
+		event.setStatus(EventStatus.FAILED);
 
-        return eventMapper.toResponse(event);
-    }
+		eventRepository.save(event);
 
-    public EventResponse getEventById(String eventId) {
+		return eventMapper.toResponse(event);
+	}
 
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Event not found : " + eventId));
+	public EventResponse getEventById(String eventId) {
 
-        return eventMapper.toResponse(event);
-    }
+		Event event = eventRepository.findById(eventId)
+				.orElseThrow(() -> new ResourceNotFoundException("Event not found : " + eventId));
 
-    public List<EventResponse> getEventsByAccount(String accountId) {
+		return eventMapper.toResponse(event);
+	}
 
-        return eventRepository
-                .findByAccountIdOrderByEventTimestampAsc(accountId)
-                .stream()
-                .map(eventMapper::toResponse)
-                .toList();
-    }
+	public List<EventResponse> getEventsByAccount(String accountId) {
+
+		return eventRepository.findByAccountIdOrderByEventTimestampAsc(accountId).stream().map(eventMapper::toResponse)
+				.toList();
+	}
 }
